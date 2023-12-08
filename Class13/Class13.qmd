@@ -1,0 +1,304 @@
+---
+title: "Class13"
+format: pdf
+---
+
+
+```{r}
+#| message: false
+#| warning: false
+library(DESeq2)
+```
+
+```{r}
+counts <- read.csv("airway_scaledcounts.csv", row.names=1)
+metadata <-  read.csv("airway_metadata.csv")
+
+```
+
+> Q1. How many genes are in this dataset?
+
+```{r}
+nrow(counts)
+```
+
+> Q2. How many 'control' cell lines do we have?
+
+```{r}
+sum(metadata$dex == "control")
+```
+
+```{r}
+metadata
+```
+
+I want to compare the control to the treated columns. To do this I will:
+
+-Step 1: Identify and extract the "control" columns.
+-Step 2: Calculate the mean value per gene for all "control" columns, and save as `control.mean`.
+-Step 3: Do the same for "treated" columns.
+-Step 4: Compare the `control.mean` and `treated.mean`.
+
+```{r}
+control.inds <- metadata$dex=="control"
+```
+
+```{r}
+metadata[control.inds,]
+```
+
+```{r}
+control.mean <- rowMeans(counts[,control.inds])
+head(control.mean)
+```
+> Q3. How would you make the below code in either approach more robust? Is there a function that could help here?
+
+
+
+> Q4. Follow the same procedure for the treated samples (i.e. calculate the mean per gene across drug treated samples and assign to a labeled vector called treated.mean)
+
+```{r}
+treated.inds <- metadata$dex=="treated"
+```
+
+```{r}
+metadata[treated.inds,]
+```
+
+```{r}
+treated.mean <- rowMeans(counts[,treated.inds])
+head(treated.mean)
+```
+
+We will combine our meancount data for bookkeeping purposes:
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+```
+
+Let's see what these count values look like:
+
+> Q5 (a). Create a scatter plot showing the mean of the treated samples against the mean of the control samples. Your plot should look something like the following.
+
+```{r}
+plot(meancounts)
+```
+
+> • Q5 (b).You could also use the ggplot2 package to make this figure producing the plot below. What geom_?() function would you use for this plot?
+
+```{r}
+library(ggplot2)
+
+ggplot(meancounts) + 
+  aes(control.mean, treated.mean) + 
+  geom_point(alpha=0.2)
+```
+
+> Q6. Try plotting both axes on a log scale. What is the argument to plot() that allows you to do this?
+
+```{r}
+plot(meancounts, log="xy")
+```
+Logs are useful when we have such skewed data. 
+
+```{r}
+# Treated / control
+
+log2(10/10)
+```
+No change from treated vs control would show a 0 with log2. A doubling in treated vs the control would show a 1 with log2.
+
+Add log2(fold-change) values to our results table.
+
+```{r}
+meancounts$log2fc <- log2(meancounts$treated.mean/
+                            meancounts$control.mean)
+head(meancounts)
+```
+I need to exclude any genes with zero counts as we can't say anything about them anyway from this experiment.
+
+```{r}
+# What values in the first two columns are zero?
+to.rm.inds <- rowSums(meancounts[,1:2] == 0) > 0
+## print(to.rm.inds)
+mycounts <- meancounts[!to.rm.inds, ]
+```
+
+> Q. How many genes do I have left?
+
+```{r}
+nrow(mycounts)
+```
+
+> Q. How many genes are "up regulated" (i.e. have a log2fold-change greater than +2)
+
+```{r}
+sum(mycounts$log2fc > +2)
+```
+
+> Q. How many are "down regulated"?
+
+```{r}
+sum(mycounts$log2fc < -2)
+```
+
+
+> Q7. What is the purpose of the arr.ind argument in the which() function call above? Why would we then take the first column of the output and need to call the unique() function?
+
+
+## Running DESeq
+
+Like many bioconductor analyssi packages, DESeq wants its input in a very particular way.
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts,
+                              colData=metadata,
+                              design=~dex)
+```
+
+To run DESeq analysis we call the main function from the package called `DESeq(dds)`
+
+```{r}
+dds <- DESeq(dds)
+```
+
+To get the results back from this `dds` object, we can use the DESeq `results()` function.
+
+```{r}
+res <- results(dds)
+head(res)
+```
+
+A common summary visualization is called a Volcano Plot.
+
+```{r}
+plot(res$log2FoldChange, -log(res$padj),
+     xlab="Log2 Fold-Change",
+     ylab="-log P-value")
+
+abline(v=c(-2,2), col="red")
+abline(h=-log(0.05), col="blue")
+```
+
+```{r}
+mycols <- rep("grey", nrow(res))
+mycols[ res$log2FoldChange > 2 ] <- "black"
+mycols[ res$log2FoldChange < -2 ] <- "black"
+mycols[ res$padj > 0.05 ] <- "grey"
+```
+
+```{r}
+plot(res$log2FoldChange, -log(res$padj), col=mycols,
+     xlab="Log2 Fold-Change",
+     ylab="-log P-value")
+
+abline(v=c(-2,2), col="red")
+abline(h=-log(0.05), col="blue")
+```
+
+# Save our results to date
+
+```{r}
+write.csv(res, file="myresults.csv")
+```
+
+# Adding annotation data
+
+We need to translate or "map" our ensemble IDs into more understandable gene names and identifiers that other useful databases have. (We will use the mapID function)
+
+```{r}
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+```
+
+```{r}
+columns(org.Hs.eg.db)
+```
+
+```{r}
+ res$symbol <- mapIds(org.Hs.eg.db,
+                        keys=row.names(res), # Our genenames
+                        keytype="ENSEMBL", # The format of our genenames
+                        column="SYMBOL", # The new format we want to add
+                        multiVals="first")
+
+```
+
+```{r}
+head(res)
+```
+> Q11. Run the mapIds() function two more times to add the Entrez ID and UniProt accession and GENENAME as new columns called res$entrez, res$uniprot and res$genename.
+
+```{r}
+res$entrez <- mapIds(org.Hs.eg.db,
+                        keys=row.names(res), # Our genenames
+                        keytype="ENSEMBL", # The format of our genenames
+                        column="ENTREZID", # The new format we want to add
+                        multiVals="first")
+```
+
+```{r}
+head(res)
+```
+```{r}
+res$uniprot <- mapIds(org.Hs.eg.db,
+                        keys=row.names(res), # Our genenames
+                        keytype="ENSEMBL", # The format of our genenames
+                        column="UNIPROT", # The new format we want to add
+                        multiVals="first")
+```
+
+```{r}
+head(res)
+```
+
+```{r}
+res$genename <- mapIds(org.Hs.eg.db,
+                        keys=row.names(res), # Our genenames
+                        keytype="ENSEMBL", # The format of our genenames
+                        column="GENENAME", # The new format we want to add
+                        multiVals="first")
+```
+
+```{r}
+head(res)
+```
+
+
+# Pathway analysis
+```{r}
+ library(pathview)
+   library(gage)
+   library(gageData)
+   data(kegg.sets.hs)
+   # Examine the first 2 pathways in this kegg set for humans
+   head(kegg.sets.hs, 2)
+```
+
+```{r}
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+```
+
+Run gage:
+```{r}
+# Get the results
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+```
+
+```{r}
+attributes(keggres)
+```
+
+```{r}
+# Look at the first 3 down (less) pathways
+head(keggres$less, 3)
+```
+
+Let's have a look at one of these pathways
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa05310")
+```
+![](hsa03510.pathview.png)
+
+

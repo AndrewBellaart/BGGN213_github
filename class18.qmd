@@ -1,0 +1,22 @@
+---
+title: "class18"
+format: pdf
+---
+
+```{r}
+```
+
+
+```{r}
+library(tximport)
+```
+
+```{r}
+folders <- dir(pattern="SRR21568*")
+samples <- sub("_quant", "", folders)
+files <- file.path( folders, "abundance.h5" )
+names(files) <- samples
+
+txi.kallisto <- tximport(files, type = "kallisto", txOut = TRUE)
+```
+

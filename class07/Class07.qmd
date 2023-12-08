@@ -1,0 +1,195 @@
+---
+title: "Class 7: Machine Learning 1"
+format: pdf
+---
+
+# Clustering
+
+We will start with k-means clustering, one of the most prevalent clustering methods.
+
+Let's make some data up: 
+
+```{r}
+hist(rnorm(10000, mean=3))
+```
+```{r}
+tmp <- c( rnorm(30,3), rnorm(30, -3))
+x <- cbind(x=tmp, y=rev(tmp))
+x
+plot(x)
+```
+
+The main function in R for K-means clustering is called `kmeans()`
+
+```{r}
+k <- kmeans(x, centers=2, nstart=20)
+k
+```
+> Q1. How many points are in each cluster?
+
+```{r}
+k$size
+```
+
+> Q2. What is the clustering result, i.e. membership vector?
+
+```{r}
+k$cluster
+```
+
+> Q3. What is the cluster center?
+
+```{r}
+k$centers
+```
+
+> Q4. Make a plot of our data colored by clustering results with optionally the cluster centers shown.
+
+```{r}
+plot(x, col=k$cluster, pch=16)
+points(k$centers)
+```
+
+> Q5. Run kmeans again but cluster into 3 groups, then plot those results like we did above.
+
+```{r}
+k3 <- kmeans(x, centers=3, nstart=20)
+k3
+
+plot(x, col=k3$cluster, pch=16)
+points(k3$centers)
+```
+```{r}
+hc <- hclust(dist(x))
+hc
+plot(hc)
+abline(h=8, col="red")
+```
+## The cluster dendrogram shows hierarchical clustering: we start at the bottom, with each point as their own cluster. The number of clusters then drops in half as points next to each other, and so on until there is only 1 cluster at the top of the dendrogram.
+
+The function to get our clusters/groups from a hclust object is called `cutree()`
+
+```{r}
+grps <- cutree(hc, h=8)
+grps
+```
+
+> Q. Plot our hclust results in terms of our data colored by cluster membership.
+
+```{r}
+plot(x, col=grps)
+```
+
+# Principal Component Analysis (PCA)
+# The first principal component follows a "best fit" through the data points. The data also has maximum variance for PC1.
+
+```{r}
+url <- "https://tinyurl.com/UK-foods"
+x <- read.csv(url)
+x
+```
+> Q1. How many rows and columns are in your new data frame named x? What R functions could you use to answer this questions?
+
+```{r}
+dim(x)
+```
+
+## Preview the first 6 rows
+
+```{r}
+head(x)
+
+```
+
+```{r}
+# Note how the minus indexing works
+x <- read.csv(url)
+rownames(x) <- x[,1]
+x <- x[,-1]
+head(x)
+dim(x)
+```
+
+> Q2. Which approach to solving the ‘row-names problem’ mentioned above do you prefer and why? Is one approach more robust than another under certain circumstances?
+
+The approach to setting rownames=1 is preferable. In the original method, running the code multiple times without adding an additional "read.csv(url)" step will result in offsetting the column names by 1 each time and losing column titles.
+
+```{r}
+barplot(as.matrix(x), beside=T, col=rainbow(nrow(x)))
+```
+
+> Q3: Changing what optional argument in the above barplot() function results in the following plot?
+
+Changing the "beside" argument to FALSE or leaving it out will change the barplot. Changing beside to FALSE or removing it will portray the columns as stacked bars.
+
+```{r}
+barplot(as.matrix(x), beside=F, col=rainbow(nrow(x)))
+```
+
+> Q5: Generating all pairwise plots may help somewhat. Can you make sense of the following code and resulting figure? What does it mean if a given point lies on the diagonal for a given plot?
+
+```{r}
+pairs(x, col=rainbow(10), pch=16)
+```
+The x-axis of each plot is equal to whatever region is listed in that column (England in column 1, Wales in column 2, etc).
+
+
+> Q6. What is the main differences between N. Ireland and the other countries of the UK in terms of this data-set?
+
+The correlation for the plotted points are not fully linear for N. Ireland like they are for the other countries. Dots that are not in the diagonal line represent that it is more variant than the trends in the other countries.  N. Ireland had lower levels of fresh fruit consumption than the other countries, and higher levels of potato consumption.
+
+
+```{r}
+# Use the prcomp() PCA function 
+pca <- prcomp( t(x) )
+summary(pca)
+```
+
+> Q7. Complete the code below to generate a plot of PC1 vs PC2. The second line adds text labels over the data points.
+
+```{r}
+pca$x
+```
+
+
+```{r}
+# Plot PC1 vs PC2
+plot(pca$x[,1], pca$x[,2], xlab="PC1", ylab="PC2", xlim=c(-270,500))
+text(pca$x[,1], pca$x[,2], colnames(x))
+```
+
+> Q8. Customize your plot so that the colors of the country names match the colors in our UK and Ireland map and table at start of this document.
+
+```{r}
+plot(pca$x[,1], pca$x[,2], xlab="PC1", ylab="PC2", xlim=c(-270,500))
+text(pca$x[,1], pca$x[,2], colnames(x), col=c("orange", "red", "blue", "green"))
+```
+
+```{r}
+v <- round( pca$sdev^2/sum(pca$sdev^2) * 100 )
+v
+```
+
+```{r}
+## or the second row here...
+z <- summary(pca)
+z$importance
+```
+```{r}
+barplot(v, xlab="Principal Component", ylab="Percent Variation")
+```
+
+```{r}
+## Lets focus on PC1 as it accounts for > 90% of variance 
+par(mar=c(10, 3, 0.35, 0))
+barplot( pca$rotation[,1], las=2 )
+```
+
+
+> Q9: Generate a similar ‘loadings plot’ for PC2. What two food groups feature prominantely and what does PC2 maninly tell us about?
+
+```{r}
+par(mar=c(10, 3, 0.35, 0))
+barplot( pca$rotation[,2], las=2 )
+```
+# The two categories that feature most prominently are fresh potatoes and soft drinks. Wales has less consumption of soft drinks, and Scotland has less consumption of fresh potatoes. These two factors cause the most variance along the PC2 axis, which mainly shows the differences between Scotland, England, and Wales.
